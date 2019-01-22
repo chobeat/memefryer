@@ -1,20 +1,30 @@
 from pkg_resources import resource_listdir, resource_filename
-from subprocess import call
 import face_recognition
 import os
 import random
-from shutil import copyfile
 from PIL import Image, ImageDraw, ImageEnhance, ImageFilter
 import numpy as np
-import colorsys
 import cv2 as cv
 
+class EmojiSet(object):
+    emojis_path = None
+    emojis = None
+
+
+    def pick_random_emoji(self):
+        position = random.randint(0, len(self.emojis) - 1)
+        return os.path.join(self.emojis_path, self.emojis[position])
+
+class FaceEmojiSet(EmojiSet):
+
+    emojis_path = resource_filename("memefryer", "resources/face_emoji")
+    emojis = list(filter(lambda x: ".png" in x, resource_listdir("memefryer", "resources/face_emoji")))
+
+class HandEmojiSet(EmojiSet):
+    emojis_path = resource_filename("memefryer", "resources/hand_emoji")
+    emojis = list(filter(lambda x: ".png" in x, resource_listdir("memefryer", "resources/hand_emoji")))
 
 class Fryer(object):
-    def __init__(self):
-
-        self.emojis_path = resource_filename("memefryer", "emoji")
-        self.emojis = list(filter(lambda x: ".png" in x, resource_listdir("memefryer", "emoji")))
 
     def fry_from_file(self, image_path, output_path, random_transformations=False, with_emoji=True):
         """
@@ -76,17 +86,35 @@ class Fryer(object):
         Detects faces and superimposes an emoji over them.
         Returns the path to the new picture, deleting the old one.
         """
+        self._emojify_hands(img)
+        self._emojify_face(img)
+    def _emojify_face(self,img):
         faces = face_recognition.face_locations(np.array(img))
 
         if len(faces) == 0:
             return img
 
         for face in faces:
-            self._replace_with_emoji(img, face)
+            self._replace_with_emoji(img, face, FaceEmojiSet())
 
-    def _replace_with_emoji(self, img, face_position):
+    def _emojify_hands(self,img):
+        hands = self._find_hands(img)
+        for (x,y,w,h) in hands:
+            self._replace_with_emoji(img,(y,x+w,y+h,x) ,HandEmojiSet(), scale_factor=1.0)
+        return img
+
+    def _find_hands(self,img):
+
+        file_name= resource_filename("resources","haar_hands.xml")
+        file_path= resource_filename("memefryer", "resources")
+        hands_detector = cv.CascadeClassifier(os.path.join(file_path,file_name))
+
+        gray = cv.cvtColor(np.asarray(img), cv.COLOR_BGR2GRAY)
+        hands = hands_detector.detectMultiScale(gray, 1.3, 5)
+        return hands
+
+    def _replace_with_emoji(self, img, face_position, emoji_set, scale_factor=0.20):
         """
-        Takes a tuple for the face position, returns a piece of ImageMagick commands.
 
         :param img:
         :param face_position:
@@ -94,30 +122,20 @@ class Fryer(object):
         """
         (top, right, bottom, left) = face_position
 
-        # Increase the size by 20%. Account for proper centering.
-        scale_factor = 0.20
-        emoji_img = self.get_random_emoji_img(face_position, scale_factor)
-        diff_x = int((right - left) * (scale_factor / 2))
-        diff_y = int((bottom - top) * (scale_factor / 2))
+        emoji_img = self.get_random_emoji_img(face_position, scale_factor, emoji_set)
+        diff_x = int((right - left) * (scale_factor/2))
+        diff_y = int((bottom - top) * (scale_factor/2))
 
         img.paste(emoji_img, (left - diff_x, top - diff_y), mask=emoji_img)
 
-    def get_random_emoji_img(self, face_position, scale_factor):
+    def get_random_emoji_img(self, face_position, scale_factor, emoji_set):
 
         (top, right, bottom, left) = face_position
-        emoji_path = self._pick_random_emoji()
+        emoji_path = emoji_set.pick_random_emoji()
         emoji_img = Image.open(emoji_path)
         size_x = int((right - left) * (1 + scale_factor))
         size_y = int((bottom - top) * (1 + scale_factor))
         return emoji_img.resize((size_x, size_y))
-
-    def _pick_random_emoji(self):
-        """
-        Picks a random emoji among those available
-        :return:
-        """
-        position = random.randint(0, len(self.emojis) - 1)
-        return os.path.join(self.emojis_path, self.emojis[position])
 
     def _level_image(self, img):
         """
