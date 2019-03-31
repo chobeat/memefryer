@@ -24,7 +24,7 @@ class HandEmojiSet(EmojiSet):
     emojis_path = resource_filename("memefryer", "resources/hand_emoji")
     emojis = list(filter(lambda x: ".png" in x, resource_listdir("memefryer", "resources/hand_emoji")))
 
-class Fryer(object):
+class _Fryer(object):
 
     def fry_from_file(self, image_path, output_path, random_transformations=False, with_emoji=True):
         """

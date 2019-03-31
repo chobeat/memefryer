@@ -7,5 +7,13 @@
     Read more about conftest.py under:
     https://pytest.org/latest/plugins.html
 """
+from pytest import fixture
+import os
 
-# import pytest
+@fixture
+def datadir():
+
+   return os.path.join(
+        os.path.dirname(os.path.realpath(__file__)),
+        'resources',
+)
